@@ -2,8 +2,11 @@
 """
 Detects objects inside a video or an image.
 
+
 Private Functions:
     . _parse                    parses the script arguments,
+    . _create_net               creates the SSD neural network,
+
 
 Public Functions:
     . detect                    detects the objects in a frame,
@@ -27,6 +30,7 @@ from models.ssd import build_ssd
 from data import BaseTransform, VOC_CLASSES as labelmap
 
 WEIGHTS = './weights/ssd300_mAP_77.43_v2.pth'
+THRESHOLD = 0.6
 RECT_COLOR = (255, 255, 0)
 RECT_THICKNESS = 1
 FONT = cv2.FONT_HERSHEY_DUPLEX
@@ -57,15 +61,35 @@ def _parse():
     return args.filename, args.type, args.output
 
 
+def _create_net():
+    """Creates the SSD neural network.
+
+    ### Parameters:
+        -none,
+
+    ### Returns:
+        (obj):              returns the neural network,
+        (fct):              returns the transformation function,
+
+    ### Raises:
+        none
+    """
+    # Create the SSD neural network and the transformation
+    net = build_ssd('test')
+    net.load_state_dict(torch.load(WEIGHTS, map_location=lambda storage, loc: storage))
+    transform = BaseTransform(net.size, (104/256.0, 117/256.0, 123/256.0))
+    return net, transform
+
+
 # -- Public Functions ----------------------------------------------------------
 
-def detect(frame, net, transform):
+def detect(net, transform, frame):
     """Detects the objects in a frame.
 
     ### Parameters:
-        param1 (arr):       the input image,
-        param2 (obj):       the SDD neural network,
-        param3 (fct):       the transformation function,
+        param1 (obj):       the SDD neural network,
+        param2 (fct):       the transformation function,
+        param3 (arr):       the input image,
 
     ### Returns:
         (arr):              returns the labeled image,
@@ -88,7 +112,7 @@ def detect(frame, net, transform):
     # detections = [batch, number of classes, number of occurence, (score, x0, Y0, x1, y1)]
     for i in range(detections.size(1)):
         j = 0
-        while detections[0, i, j, 0] >= 0.35:
+        while detections[0, i, j, 0] >= THRESHOLD:
             score = detections[0, i, j, 0]
             text = '%s: %.2f' % (labelmap[i - 1], score)
             pt = (detections[0, i, j, 1:] * scale).numpy()
@@ -121,13 +145,11 @@ def process_image(image):
         none
     """
     # Create the SSD neural network and the transformation
-    net = build_ssd('test')
-    net.load_state_dict(torch.load(WEIGHTS, map_location=lambda storage, loc: storage))
-    transform = BaseTransform(net.size, (104/256.0, 117/256.0, 123/256.0))
+    net, transform = _create_net()
 
     # process the image through the neural network and
     # return the tagged image
-    out_image = detect(image, net.eval(), transform)
+    out_image = detect(net.eval(), transform, image)
     return out_image
 
 
@@ -145,16 +167,14 @@ def process_video(video, output):
         none
     """
     # Create the SSD neural network and the transformation
-    net = build_ssd('test')
-    net.load_state_dict(torch.load(WEIGHTS, map_location=lambda storage, loc: storage))
-    transform = BaseTransform(net.size, (104/256.0, 117/256.0, 123/256.0))
+    net, transform = _create_net()
 
     # Process the video frame by frame
     reader = imageio.get_reader(video)
     fps = reader.get_meta_data()['fps']
     writer = imageio.get_writer(output, fps=fps)
     for i, frame in enumerate(reader):
-        frame = detect(frame, net.eval(), transform)
+        frame = detect(net.eval(), transform, frame)
         writer.append_data(frame)
         print(i)
     writer.close()
