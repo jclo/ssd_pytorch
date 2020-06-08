@@ -1,0 +1,12 @@
+.DS_Store
+__trash
+
+.venv
+__pycache__
+
+img/*
+!img/annotated_image.png
+!img/dog-bicycle.png
+
+weights/*
+!weights/README.md
